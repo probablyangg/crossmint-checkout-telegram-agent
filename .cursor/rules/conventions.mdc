@@ -1,0 +1,152 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Project Conventions & Rules
+
+## 🚨 CRITICAL RULES - ALWAYS FOLLOW
+
+### Package Version Management
+**NEVER ASSUME OR HALLUCINATE PACKAGE VERSIONS**
+
+- ❌ **DO NOT** specify package versions without confirmation
+- ✅ **ALWAYS ASK** the user for latest stable versions when adding:
+  - `package.json` dependencies  
+  - `requirements.txt` (Python projects)
+  - `pyproject.toml` (Python projects)
+  - `Cargo.toml` (Rust projects)
+  - Any dependency management files
+
+**Process:**
+1. Identify packages needed
+2. Ask user: "What are the current stable versions for: [package1], [package2], etc.?"  
+3. Wait for user confirmation before adding to project files
+4. Use EXACT versions provided by user
+
+**Rationale:** Incorrect versions cause:
+- Dependency conflicts
+- Build failures  
+- Security vulnerabilities
+- Compatibility issues
+
+## Development Workflow Rules
+
+### Multi-Agent System Protocol
+**Current Project Uses Planner-Executor Pattern**
+
+- **Planner Mode**: High-level analysis, task breakdown, documentation updates
+- **Executor Mode**: Implementation, coding, testing, progress reporting
+- **Always** update `.cursor/scratchpad.md` with progress
+- **Report** completion of each task before moving to next
+- **Ask** for permission to switch modes when appropriate
+
+### Code Quality Standards
+
+#### TypeScript Projects
+- ✅ Always use TypeScript for type safety
+- ✅ Define interfaces/types in dedicated `types/` directory
+- ✅ Use `zod` for runtime validation when needed
+- ✅ Proper error handling with try-catch blocks
+- ✅ Environment variable validation
+
+#### Project Structure
+- ✅ Modular architecture with clear separation of concerns
+- ✅ Consistent naming conventions (camelCase for files, PascalCase for types)
+- ✅ Clear directory structure as defined in planning
+- ✅ Separate configuration, utilities, and business logic
+
+### Security & Best Practices
+
+#### Environment Variables
+- ✅ Never hardcode API keys or secrets
+- ✅ Always use `.env` files with `.env.example` template
+- ✅ Add `.env` to `.gitignore`
+- ✅ Validate required environment variables on startup
+
+#### Error Handling
+- ✅ Implement graceful error handling
+- ✅ Provide meaningful error messages
+- ✅ Log errors appropriately (without exposing secrets)
+- ✅ Implement fallback behaviors when possible
+
+#### Rate Limiting & API Usage
+- ✅ Implement rate limiting for external APIs
+- ✅ Handle API quota limits gracefully
+- ✅ Cache responses when appropriate
+- ✅ Implement retry logic with exponential backoff
+
+## Documentation Standards
+
+### Code Documentation
+- ✅ Document complex functions with JSDoc comments
+- ✅ Include examples for utility functions
+- ✅ Document API interfaces and expected behavior
+- ✅ Update README.md with setup and usage instructions
+
+### Progress Tracking
+- ✅ Update scratchpad.md after each completed task
+- ✅ Document lessons learned and solutions to problems
+- ✅ Record any deviations from original plan with rationale
+- ✅ Keep project status board current
+
+## Testing & Deployment
+
+### Testing Requirements
+- ✅ Test each functionality before moving to next task
+- ✅ Manual testing for user-facing features
+- ✅ Verify error handling scenarios
+- ✅ Test with realistic data/scenarios
+
+### Deployment Preparation
+- ✅ Ensure all environment variables are documented
+- ✅ Provide clear setup instructions
+- ✅ Test in production-like environment when possible
+- ✅ Document any deployment-specific configurations
+
+## Communication Protocols
+
+### With User
+- ✅ Always confirm package versions before installation
+- ✅ Report task completion with success criteria verification
+- ✅ Ask for clarification when requirements are unclear
+- ✅ Provide regular progress updates
+- ✅ Explain technical decisions and trade-offs
+
+### Error Resolution
+- ✅ Document solutions to errors in "Lessons Learned"
+- ✅ Don't loop more than 3 times on same error
+- ✅ Ask for help when stuck rather than guessing
+- ✅ Provide full context when requesting assistance
+
+## Technology-Specific Conventions
+
+### AI SDK (Vercel) Projects
+- ✅ Use `generateText` for simple responses
+- ✅ Use `streamText` for real-time chat interfaces
+- ✅ Implement `maxSteps` for complex multi-step reasoning
+- ✅ Properly handle conversation context/history
+- ✅ Use structured outputs with `zod` schemas when needed
+
+### Telegram Bot Projects
+- ✅ Use polling mode for development, webhooks for production
+- ✅ Implement proper command handling (starting with `/`)
+- ✅ Handle different message types appropriately
+- ✅ Implement user rate limiting
+- ✅ Graceful handling of Telegram API rate limits
+
+### Node.js Projects
+- ✅ Use `tsx` for TypeScript execution in development
+- ✅ Proper build pipeline with `tsc`
+- ✅ Environment-specific configurations
+- ✅ Proper process management and graceful shutdowns
+
+---
+
+## Version Control
+
+**Last Updated:** Initial creation
+**Applies To:** All projects in this workspace
+**Review Frequency:** After each major project or when new patterns emerge
+
+**Note:** These conventions should be referenced before making any significant technical decisions or when unsure about implementation approaches. 

@@ -15,54 +15,36 @@ const crossmintEnv = crossmintEnvSchema.parse({
 
 // Crossmint Headless Checkout API Types (CORRECTED)
 const PhysicalAddressSchema = z.object({
-  name: z.string().min(1, "Name is required for physical address"),
-  line1: z.string().min(1, "Line 1 is required for physical address"),
+  name: z.string(),
+  line1: z.string(),
   line2: z.string().optional(),
-  city: z.string().min(1, "City is required for physical address"),
-  state: z.string().optional().describe("State/Province/Region - optional"),
-  postalCode: z.string().min(1, "Postal/ZIP code is required for physical address"),
-  country: z.string()
-    .min(2, "Country is required for physical address")
-    .max(2, "Country must be a 2-letter ISO code for physical address")
-    .toUpperCase(),
-}).superRefine((data, ctx) => {
-  // Only US supported for now
-  if (data.country !== "US") {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Only 'US' country code is supported at this time",
-    });
-  }
-
-  if (data.country === "US" && !data.state) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "State is required for US physical address",
-    });
-  }
+  city: z.string(),
+  state: z.string().optional(), // Required for US addresses
+  postalCode: z.string(),
+  country: z.string(),
 });
 
 const RecipientSchema = z.object({
-  email: z.string().email(),
-  physicalAddress: PhysicalAddressSchema, // REQUIRED for Amazon products
+  email: z.string(),
+  physicalAddress: PhysicalAddressSchema.optional(),
 });
 
 const PaymentSchema = z.object({
-  method: z.enum(["ethereum", "ethereum-sepolia", "base", "base-sepolia", "polygon", "polygon-amoy", "solana"])
-    .describe("The blockchain network to use for the transaction"),
-  currency: z.enum(["usdc"]).describe("The currency to use for payment"),
-  payerAddress: z.string().describe("The address that will pay for the transaction"), // REQUIRED
-  receiptEmail: z.string().email().optional().describe("Optional email to send payment receipt to"),
+  method: z.enum(['ethereum-sepolia', 'polygon-amoy', 'base-sepolia', 'arbitrum-sepolia']),
+  currency: z.enum(['usdc', 'eth']),
+  payerAddress: z.string(),
+  receiptEmail: z.string().optional(),
 });
 
-const LineItemSchema = z.object({
+// Updated LineItems schema to be an object
+const LineItemsSchema = z.object({
   productLocator: z.string().describe("The product locator. Ex: 'amazon:<amazon_product_id>', 'amazon:<asin>'"),
 });
 
 const CreateOrderRequestSchema = z.object({
   recipient: RecipientSchema,
   payment: PaymentSchema,
-  lineItems: z.array(LineItemSchema), // Array of line items
+  lineItems: LineItemsSchema, // Single object, not array
 });
 
 const OrderResponseSchema = z.object({
@@ -135,7 +117,7 @@ const OrderResponseSchema = z.object({
 export type PhysicalAddress = z.infer<typeof PhysicalAddressSchema>;
 export type Recipient = z.infer<typeof RecipientSchema>;
 export type Payment = z.infer<typeof PaymentSchema>;
-export type LineItem = z.infer<typeof LineItemSchema>;
+export type LineItem = z.infer<typeof LineItemsSchema>;
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
 export type OrderResponse = z.infer<typeof OrderResponseSchema>;
 
@@ -250,7 +232,9 @@ class CrossmintHeadlessCheckoutService {
       // Update the order request with current locator
       const currentRequest = {
         ...orderRequest,
-        lineItems: [{ productLocator: locator }]
+        lineItems: {
+          productLocator: locator
+        }
       };
 
       try {
@@ -351,11 +335,9 @@ class CrossmintHeadlessCheckoutService {
           payerAddress: walletAddress, // REQUIRED: User's wallet address
           receiptEmail: userEmail,
         },
-        lineItems: [
-          {
-            productLocator, // This will be replaced in retry mechanism
-          }
-        ],
+        lineItems: {
+          productLocator, // Amazon product locator as object, not array
+        },
       };
 
       console.log(`🔗 Product locator: ${productLocator}`);
@@ -487,7 +469,13 @@ class CrossmintHeadlessCheckoutService {
     walletAddress: string, 
     serializedTransaction: string, 
     chain: string = 'base-sepolia'
-  ): Promise<{ success: boolean; transactionId?: string; error?: string }> {
+  ): Promise<{ 
+    success: boolean; 
+    transactionId?: string; 
+    status?: string; 
+    transactionData?: any; 
+    error?: string 
+  }> {
     try {
       console.log('\n🔐 === CROSSMINT TRANSACTION SIGNING DEBUG ===');
       // Use the exact API endpoint from the guide: /api/2022-06-09/wallets
@@ -533,12 +521,17 @@ class CrossmintHeadlessCheckoutService {
       if (response.status === 200 || response.status === 201) {
         const transactionData = response.data;
         const transactionId = transactionData.id || transactionData.transactionId;
-        console.log(`✅ Transaction submitted successfully: ${transactionId}`);
+        const transactionStatus = transactionData.status;
         
-        // Following the guide exactly: Step 3 is done, now Step 4 (polling) will handle the rest
+        console.log(`✅ Transaction submitted successfully: ${transactionId}`);
+        console.log(`📊 Transaction status: ${transactionStatus}`);
+        
+        // Return the transaction status and data for approval handling
         return {
           success: true,
-          transactionId: transactionId
+          transactionId: transactionId,
+          status: transactionStatus,
+          transactionData: transactionData
         };
       } else {
         console.error(`❌ Transaction signing failed with status: ${response.status}`);
@@ -632,6 +625,203 @@ class CrossmintHeadlessCheckoutService {
     }
   }
 
+  /**
+   * Get transaction details including pending approval data
+   */
+  async getTransactionDetails(
+    walletAddress: string,
+    transactionId: string
+  ): Promise<{ 
+    transaction: any; 
+    pendingMessage?: string; 
+    signerLocator?: string; 
+    error?: string 
+  }> {
+    try {
+      console.log('\n🔍 === GETTING TRANSACTION DETAILS FOR APPROVAL ===');
+      const walletApiUrl = `${this.baseURL}/wallets/${walletAddress}/transactions/${transactionId}`;
+      console.log(`📡 URL: GET ${walletApiUrl}`);
+      console.log(`🔑 API Key: ${this.apiKey.substring(0, 12)}...${this.apiKey.substring(-8)}`);
+      console.log(`👛 Wallet: ${walletAddress}`);
+      console.log(`📝 Transaction ID: ${transactionId}`);
+
+      const response = await axios.get(
+        walletApiUrl,
+        {
+          headers: {
+            'x-api-key': this.apiKey,
+          },
+          timeout: 15000,
+        }
+      );
+
+      console.log(`\n✅ === TRANSACTION DETAILS RESPONSE ===`);
+      console.log(`📊 Response Status: ${response.status} ${response.statusText}`);
+      console.log('📦 FULL TRANSACTION RESPONSE:');
+      console.log(JSON.stringify(response.data, null, 2));
+      console.log('========================================\n');
+
+      const transactionData = response.data;
+      
+      // Extract pending approval information
+      if (transactionData.status === 'awaiting-approval' && 
+          transactionData.approvals && 
+          transactionData.approvals.pending && 
+          transactionData.approvals.pending.length > 0) {
+        
+        const pendingApproval = transactionData.approvals.pending[0]; // Get first pending approval
+        const pendingMessage = pendingApproval.message;
+        const signerLocator = pendingApproval.signer;
+        
+        console.log(`✅ Found pending approval:`);
+        console.log(`   📝 Message to sign: ${pendingMessage}`);
+        console.log(`   🔐 Signer: ${signerLocator}`);
+        
+        return {
+          transaction: transactionData,
+          pendingMessage: pendingMessage,
+          signerLocator: signerLocator
+        };
+      } else {
+        console.log(`⚠️ No pending approvals found. Status: ${transactionData.status}`);
+        return {
+          transaction: transactionData,
+          error: `Transaction is not awaiting approval. Current status: ${transactionData.status}`
+        };
+      }
+
+    } catch (error: any) {
+      console.error('❌ Error fetching transaction details:', error);
+      
+      if (error.response) {
+        console.error('❌ Transaction fetch error details:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data
+        });
+        
+        return {
+          transaction: null,
+          error: `Failed to fetch transaction: ${error.response.data?.message || error.response.statusText}`
+        };
+      } else {
+        return {
+          transaction: null,
+          error: `Network error: ${error.message}`
+        };
+      }
+    }
+  }
+
+  /**
+   * Submit approval signature for a pending transaction
+   * Uses the official Crossmint Wallet API for passkey approval
+   */
+  async approveTransaction(
+    walletAddress: string,
+    transactionId: string,
+    signerLocator: string,
+    signature: {
+      r: string;
+      s: string;
+    },
+    metadata: {
+      authenticatorData: string;
+      challengeIndex: number;
+      clientDataJSON: string;
+      typeIndex: number;
+      userVerificationRequired: boolean;
+    }
+  ): Promise<{ 
+    success: boolean; 
+    transaction?: any; 
+    error?: string 
+  }> {
+    try {
+      console.log('\n🔐 === SUBMITTING TRANSACTION APPROVAL ===');
+      const approvalApiUrl = `${this.baseURL}/wallets/${walletAddress}/transactions/${transactionId}/approvals`;
+      console.log(`📡 URL: POST ${approvalApiUrl}`);
+      console.log(`🔑 API Key: ${this.apiKey.substring(0, 12)}...${this.apiKey.substring(-8)}`);
+      console.log(`👛 Wallet: ${walletAddress}`);
+      console.log(`📝 Transaction ID: ${transactionId}`);
+      console.log(`🔐 Signer: ${signerLocator}`);
+
+      // Construct the approval payload according to Crossmint API docs
+      const approvalPayload = {
+        approvals: [{
+          signer: signerLocator,
+          signature: {
+            r: signature.r,
+            s: signature.s
+          },
+          metadata: {
+            authenticatorData: metadata.authenticatorData,
+            challengeIndex: metadata.challengeIndex,
+            clientDataJSON: metadata.clientDataJSON,
+            typeIndex: metadata.typeIndex,
+            userVerificationRequired: metadata.userVerificationRequired
+          }
+        }]
+      };
+
+      console.log('📦 APPROVAL PAYLOAD:');
+      console.log(JSON.stringify(approvalPayload, null, 2));
+      console.log('===========================================\n');
+
+      const response = await axios.post(
+        approvalApiUrl,
+        approvalPayload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.apiKey,
+          },
+          timeout: 30000,
+        }
+      );
+
+      console.log(`\n✅ === APPROVAL SUBMISSION RESPONSE ===`);
+      console.log(`📊 Response Status: ${response.status} ${response.statusText}`);
+      console.log('📦 FULL APPROVAL RESPONSE:');
+      console.log(JSON.stringify(response.data, null, 2));
+      console.log('=====================================\n');
+
+      if (response.status === 201) {
+        console.log(`✅ Transaction approval submitted successfully`);
+        return {
+          success: true,
+          transaction: response.data
+        };
+      } else {
+        console.error(`❌ Approval submission failed with status: ${response.status}`);
+        return {
+          success: false,
+          error: `Approval failed with status: ${response.status}`
+        };
+      }
+
+    } catch (error: any) {
+      console.error('❌ Error submitting approval:', error);
+      
+      if (error.response) {
+        console.error('❌ Approval submission error details:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data
+        });
+        
+        return {
+          success: false,
+          error: `Approval submission failed: ${error.response.data?.message || error.response.statusText}`
+        };
+      } else {
+        return {
+          success: false,
+          error: `Network error: ${error.message}`
+        };
+      }
+    }
+  }
 
 }
 

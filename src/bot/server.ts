@@ -189,24 +189,67 @@ export class BotHttpServer {
 
         console.log(`💳 Payment completed: $${amount} for user ${userId || 'unknown'}`);
 
-        // If we have userId, update their memory and notify them
+        // If we have userId, verify their updated balance and notify them
         if (userId) {
           const memory = memoryUtils.getUserMemory(userId);
           if (memory && (memory as any).walletInfo) {
-            // Update wallet balance (in real implementation, fetch from Crossmint API)
-            (memory as any).walletInfo.lastTopUpAmount = amount;
-            (memory as any).walletInfo.lastTopUpAt = Date.now();
-
-            // Notify user on Telegram
-            await telegramBot.sendMessage(
-              userId,
-              `💰 *Payment Successful!*\n\n` +
-              `✅ $${amount} ${currency} has been added to your wallet.\n` +
-              `🔄 Transaction ID: \`${transactionId}\`\n\n` +
-              `Your wallet is now funded and ready for shopping!\n` +
-              `Use /search to find products or /balance to check your current balance.`,
-              { parse_mode: 'Markdown' }
-            );
+            // ✅ REAL BALANCE VERIFICATION: Fetch actual balance from Crossmint API
+            try {
+              console.log(`💰 Verifying real balance for user ${userId} after payment of $${amount}`);
+              const realBalanceData = await crossmintWalletService.getWalletBalance(userId);
+              
+              if (realBalanceData) {
+                const usdcBalance = realBalanceData.balances.find(b => b.currency === 'USDC')?.amount || '0.00';
+                console.log(`✅ Real USDC balance verified: ${usdcBalance} USDC`);
+                
+                // Update memory with real balance data for caching
+                (memory as any).walletInfo.lastTopUpAmount = amount;
+                (memory as any).walletInfo.lastTopUpAt = Date.now();
+                (memory as any).walletInfo.lastVerifiedBalance = usdcBalance;
+                (memory as any).walletInfo.lastBalanceCheck = Date.now();
+                
+                // Notify user with real balance confirmation
+                await telegramBot.sendMessage(
+                  userId,
+                  `💰 *Payment Successful!*\n\n` +
+                  `✅ $${amount} ${currency} has been added to your wallet.\n` +
+                  `💰 *Current Balance:* ${parseFloat(usdcBalance).toFixed(2)} USDC\n` +
+                  `🔄 Transaction ID: \`${transactionId}\`\n\n` +
+                  `Your wallet is now funded and ready for shopping!\n` +
+                  `Use /search to find products or /balance to check your current balance.`,
+                  { parse_mode: 'Markdown' }
+                );
+              } else {
+                // Fallback if balance fetch fails
+                console.log(`⚠️ Could not verify balance for user ${userId}, using fallback notification`);
+                (memory as any).walletInfo.lastTopUpAmount = amount;
+                (memory as any).walletInfo.lastTopUpAt = Date.now();
+                
+                await telegramBot.sendMessage(
+                  userId,
+                  `💰 *Payment Successful!*\n\n` +
+                  `✅ $${amount} ${currency} has been processed.\n` +
+                  `🔄 Transaction ID: \`${transactionId}\`\n\n` +
+                  `Use /balance to check your updated balance.`,
+                  { parse_mode: 'Markdown' }
+                );
+              }
+            } catch (balanceError) {
+              console.error('❌ Error verifying real balance after payment:', balanceError);
+              
+              // Fallback notification without balance verification
+              (memory as any).walletInfo.lastTopUpAmount = amount;
+              (memory as any).walletInfo.lastTopUpAt = Date.now();
+              
+              await telegramBot.sendMessage(
+                userId,
+                `💰 *Payment Successful!*\n\n` +
+                `✅ $${amount} ${currency} has been processed.\n` +
+                `🔄 Transaction ID: \`${transactionId}\`\n\n` +
+                `Use /balance to check your updated balance.`,
+                { parse_mode: 'Markdown' }
+              );
+            }
           }
         }
 
@@ -223,6 +266,141 @@ export class BotHttpServer {
         res.status(500).json({
           error: 'Internal server error',
           message: 'Failed to process payment'
+        });
+      }
+    });
+
+    // Webhook endpoint for transaction approval completion
+    this.app.post('/api/webhook/transaction-approved', async (req: Request, res: Response): Promise<void> => {
+      try {
+        const { userId, transactionId, orderId, status, walletAddress: _walletAddress } = req.body;
+
+        if (!userId || !transactionId || !orderId || !status) {
+          res.status(400).json({
+            error: 'Missing required fields: userId, transactionId, orderId, status'
+          });
+          return;
+        }
+
+        console.log(`🔐 Transaction approval: ${transactionId} for user ${userId} - Status: ${status}`);
+
+        if (status === 'approved') {
+          try {
+            // ✅ REAL BALANCE VERIFICATION: Verify balance after successful transaction
+            console.log(`💰 Verifying real balance for user ${userId} after transaction approval`);
+            const realBalanceData = await crossmintWalletService.getWalletBalance(userId);
+            
+            let balanceMessage = '';
+            if (realBalanceData) {
+              const usdcBalance = realBalanceData.balances.find(b => b.currency === 'USDC')?.amount || '0.00';
+              console.log(`✅ Real USDC balance verified: ${usdcBalance} USDC after transaction`);
+              balanceMessage = `💰 *Current Balance:* ${parseFloat(usdcBalance).toFixed(2)} USDC\\.\n`;
+              
+              // Update user memory with real balance
+              const memory = memoryUtils.getUserMemory(userId);
+              if (memory && (memory as any).walletInfo) {
+                (memory as any).walletInfo.lastVerifiedBalance = usdcBalance;
+                (memory as any).walletInfo.lastBalanceCheck = Date.now();
+              }
+            }
+            
+            // Notify user on Telegram that their transaction was approved
+            await telegramBot.sendMessage(
+              userId,
+              `✅ *Payment Approved Successfully\\!*\n\n` +
+              `🔐 Your transaction has been approved with your passkey\\.\n` +
+              `💰 Payment is now being processed\\.\n` +
+              balanceMessage +
+              `📦 Your order will be shipped to your address\\.\n\n` +
+              `*Order ID:* \`${orderId}\`\n` +
+              `*Transaction ID:* \`${transactionId}\`\n\n` +
+              `You will receive email updates about your order status\\.`,
+              { 
+                parse_mode: 'MarkdownV2',
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: '🔄 Check Order Status',
+                        callback_data: `check_order:${orderId}`
+                      }
+                    ],
+                    [
+                      {
+                        text: '🔍 Search More Products',
+                        callback_data: 'search_more'
+                      }
+                    ]
+                  ]
+                }
+              }
+            );
+            
+            console.log(`✅ User ${userId} notified of transaction approval with verified balance`);
+            
+          } catch (error) {
+            console.error('❌ Error verifying balance after transaction approval:', error);
+            
+            // Fallback notification without balance verification
+            await telegramBot.sendMessage(
+              userId,
+              `✅ *Payment Approved Successfully\\!*\n\n` +
+              `🔐 Your transaction has been approved with your passkey\\.\n` +
+              `💰 Payment is now being processed\\.\n` +
+              `📦 Your order will be shipped to your address\\.\n\n` +
+              `*Order ID:* \`${orderId}\`\n` +
+              `*Transaction ID:* \`${transactionId}\`\n\n` +
+              `Use /balance to check your updated balance\\.\n` +
+              `You will receive email updates about your order status\\.`,
+              { 
+                parse_mode: 'MarkdownV2',
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: '🔄 Check Order Status',
+                        callback_data: `check_order:${orderId}`
+                      }
+                    ],
+                    [
+                      {
+                        text: '🔍 Search More Products',
+                        callback_data: 'search_more'
+                      }
+                    ]
+                  ]
+                }
+              }
+            );
+            
+            console.log(`✅ User ${userId} notified of transaction approval (fallback)`);
+          }
+        } else {
+          // Handle approval failure
+          await telegramBot.sendMessage(
+            userId,
+            `❌ *Transaction Approval Failed*\n\n` +
+            `Your transaction could not be approved\\. Please try again or contact support\\.`,
+            { parse_mode: 'MarkdownV2' }
+          );
+          
+          console.log(`❌ User ${userId} notified of transaction approval failure`);
+        }
+
+        res.json({
+          success: true,
+          message: 'Transaction approval processed successfully',
+          userId,
+          transactionId,
+          orderId,
+          status
+        });
+
+      } catch (error) {
+        console.error('❌ Error processing transaction approval:', error);
+        res.status(500).json({
+          error: 'Internal server error',
+          message: 'Failed to process transaction approval'
         });
       }
     });
@@ -296,6 +474,7 @@ export class BotHttpServer {
         console.log(`   • POST /api/webhook/wallet-created`);
         console.log(`   • POST /api/logout`);
         console.log(`   • POST /api/webhook/payment-completed`);
+        console.log(`   • POST /api/webhook/transaction-approved`);
         console.log(`   • GET  /api/user/:userId/wallet`);
         console.log(`   • GET  /health`);
         this.isRunning = true;

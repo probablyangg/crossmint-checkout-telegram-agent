@@ -4,6 +4,7 @@ import { crossmintWalletService } from '../../commerce/crossmint/wallet.js';
 import { crossmintHeadlessCheckoutService, type AmazonProduct, type PhysicalAddress } from '../../commerce/crossmint/checkout.js';
 import { escapeMarkdown } from '../../commerce/search/formatting.js';
 import { getCachedProduct } from './searchHandler.js';
+import { config } from '../../utils/config.js';
 
 // Session management for checkout flow
 const userSessions = new Map<number, UserSession>();
@@ -499,6 +500,64 @@ async function createHeadlessOrder(
 
       if (signingResult.success) {
         console.log(`✅ Transaction signed successfully: ${signingResult.transactionId}`);
+        console.log(`📊 Transaction status: ${signingResult.status}`);
+        
+        // Check if transaction needs approval (passkey wallets)
+        if (signingResult.status === 'awaiting-approval') {
+          console.log(`🔐 Transaction needs approval: ${signingResult.transactionId}`);
+          
+          // Create approval state (similar to topup flow)
+          const approvalState = Buffer.from(JSON.stringify({ 
+            userId,
+            transactionId: signingResult.transactionId,
+            orderId: orderId,
+            walletAddress: userWallet.walletAddress,
+            crossmintUserId: userWallet.crossmintUserId,
+            email: userWallet.email,
+            authToken: userWallet.authToken,
+            productTitle: productTitle,
+            totalAmount: totalAmount,
+            totalCurrency: totalCurrency
+          })).toString('base64');
+          
+          const approvalUrl = `${config.webApp.url}/approve?state=${approvalState}`;
+          
+          // Send approval message to user
+          const approvalMessage = 
+            `🔐 *Transaction Approval Required*\\n\\n` +
+            `*Order ID:* ${escapeMarkdown(orderId)}\\n` +
+            `*Product:* ${escapeMarkdown(productTitle)}\\n` +
+            `*Total:* ${escapeMarkdown(totalAmount)} ${escapeMarkdown(totalCurrency)}\\n\\n` +
+            `⚠️ Your transaction needs approval with your wallet\\n\\n` +
+            `Click the button below to approve this payment with your passkey\\.`;
+          
+          await bot.sendMessage(chatId, approvalMessage, {
+            parse_mode: 'MarkdownV2',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🔐 Approve Payment',
+                    url: approvalUrl
+                  }
+                ],
+                [
+                  {
+                    text: '❌ Cancel Order',
+                    callback_data: 'checkout_cancel'
+                  }
+                ]
+              ]
+            }
+          });
+          
+          console.log(`🔗 Approval URL generated: ${approvalUrl}`);
+          
+          // Keep session active for approval completion
+          session.step = 'completed'; // Mark as awaiting approval
+          userSessions.set(userId, session);
+          return;
+        }
         
         // Transaction completed successfully - send success message
         const successMessage = 

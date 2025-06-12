@@ -144,15 +144,15 @@ function AmountInput({ amount, onChange }: { amount: string, onChange: (value: s
     if (value.split(".").length > 2) return;
     if (value.split(".")[1]?.length > 2) return;
 
-    onChange(value);
+      onChange(value);
   };
 
   return (
-    <input
+      <input
       placeholder="$0.00"
       className="mb-1 w-full border-none text-center text-[54px] font-bold outline-none focus:ring-0"
       value={amount ? `$${amount}` : ""}
-      onChange={handleChange}
+        onChange={handleChange}
       style={{ maxWidth: 200 }}
     />
   );
@@ -272,18 +272,18 @@ function Checkout({
                 ←
               </button>
             )}
-            <CrossmintEmbeddedCheckout
+      <CrossmintEmbeddedCheckout
               recipient={{ walletAddress }}
               lineItems={{
-                tokenLocator: USDC_LOCATOR,
-                executionParameters: {
-                  mode: "exact-in",
-                  amount: amount || "0.00",
-                  maxSlippageBps: "500",
-                },
+            tokenLocator: USDC_LOCATOR,
+            executionParameters: {
+                mode: "exact-in",
+                amount: amount || "0.00",
+                maxSlippageBps: "500",
+            },
               }}
-              payment={{
-                crypto: { enabled: false },
+        payment={{
+          crypto: { enabled: false },
                 fiat: {
                   enabled: true,
                   allowedMethods: {
@@ -293,9 +293,9 @@ function Checkout({
                   },
                 },
                 receiptEmail,
-              }}
+        }}
               appearance={CHECKOUT_APPEARANCE}
-            />
+      />
           </div>
         </div>
       )}
@@ -315,7 +315,7 @@ function TopUpPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [amount, setAmount] = useState('');
   const [step, setStep] = useState<'options' | 'processing' | 'completed'>('options');
-
+  
   // Initialize user data from URL state
   useEffect(() => {
     const stateParam = searchParams.get('state');
@@ -358,8 +358,8 @@ function TopUpPage() {
       } else {
         console.warn("Incomplete session data, falling back to API call");
         if (!BOT_API_URL) {
-          setError('Configuration error: Bot API URL is not set. Please contact support.');
-          setIsLoading(false);
+            setError('Configuration error: Bot API URL is not set. Please contact support.');
+            setIsLoading(false);
         }
       }
     } else {
@@ -372,20 +372,20 @@ function TopUpPage() {
   useEffect(() => {
     if (userId && !walletAddress && BOT_API_URL) {
       const fetchWallet = async () => {
-        try {
-          setIsLoading(true);
-          const response = await axios.get(`${BOT_API_URL}/api/user/${userId}/wallet`);
-          if (response.data.success && response.data.hasWallet) {
-            setWalletAddress(response.data.wallet.address);
-          } else {
-            setError('Could not find a wallet for this user. Please /login in the bot first.');
-          }
-        } catch (e) {
-          console.error('Failed to fetch wallet:', e);
-          setError('Failed to connect to the bot server to get your wallet details.');
-        } finally {
-          setIsLoading(false);
+      try {
+        setIsLoading(true);
+        const response = await axios.get(`${BOT_API_URL}/api/user/${userId}/wallet`);
+        if (response.data.success && response.data.hasWallet) {
+          setWalletAddress(response.data.wallet.address);
+        } else {
+          setError('Could not find a wallet for this user. Please /login in the bot first.');
         }
+      } catch (e) {
+        console.error('Failed to fetch wallet:', e);
+        setError('Failed to connect to the bot server to get your wallet details.');
+      } finally {
+        setIsLoading(false);
+      }
       };
       fetchWallet();
     }
@@ -455,13 +455,13 @@ function TopUpPage() {
     }
 
     if (step === 'completed') {
-      return (
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-green-600">Payment Successful!</h2>
-          <p className="mt-2 text-gray-600">Your funds have been added to your wallet.</p>
-          <p className="mt-4 text-sm text-gray-500">You can now close this window and return to Telegram.</p>
-        </div>
-      );
+        return (
+            <div className="text-center">
+                <h2 className="text-2xl font-bold text-green-600">Payment Successful!</h2>
+                <p className="mt-2 text-gray-600">Your funds have been added to your wallet.</p>
+                <p className="mt-4 text-sm text-gray-500">You can now close this window and return to Telegram.</p>
+            </div>
+        );
     }
 
     if (step === 'processing') {
@@ -505,12 +505,12 @@ function TopUpPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
-        <div className="flex flex-col items-center">
+        <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-md">
+            <div className="flex flex-col items-center">
           {step === "options" && <TestingCardModal />}
-          {renderContent()}
+                {renderContent()}
+            </div>
         </div>
-      </div>
     </main>
   );
 }
@@ -519,9 +519,9 @@ export default function TopUp() {
     return (
         <CrossmintProvider apiKey={CLIENT_API_KEY as string}>
             <CrossmintCheckoutProvider>
-                <Suspense fallback={<div>Loading...</div>}>
-                    <TopUpPage />
-                </Suspense>
+        <Suspense fallback={<div>Loading...</div>}>
+            <TopUpPage />
+        </Suspense>
             </CrossmintCheckoutProvider>
         </CrossmintProvider>
     )

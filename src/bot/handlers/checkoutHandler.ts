@@ -1,10 +1,11 @@
-import type TelegramBot from 'node-telegram-bot-api';
+import TelegramBot from 'node-telegram-bot-api';
 import { telegramBot } from '../platforms/telegram.js';
 import { crossmintWalletService } from '../../commerce/crossmint/wallet.js';
 import { crossmintHeadlessCheckoutService, type AmazonProduct, type PhysicalAddress } from '../../commerce/crossmint/checkout.js';
+import { crossmintDelegationService } from '../../commerce/crossmint/delegation.js';
+import { config } from '../../utils/config.js';
 import { escapeMarkdown } from '../../commerce/search/formatting.js';
 import { getCachedProduct } from './searchHandler.js';
-import { config } from '../../utils/config.js';
 
 // Session management for checkout flow
 const userSessions = new Map<number, UserSession>();
@@ -16,6 +17,24 @@ interface UserSession {
   physicalAddress?: PhysicalAddress;
   step: 'product_selected' | 'collecting_email' | 'collecting_address' | 'creating_order' | 'completed';
   productIndex?: number;
+}
+
+/**
+ * Sanitize a string for safe JSON encoding by removing control characters and problematic chars
+ */
+function sanitizeForJson(str: string | undefined | null): string {
+  if (!str) return '';
+  
+  return str
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+    .replace(/[\u2000-\u206F\u2E00-\u2E7F]/g, '') // Remove various Unicode spaces and punctuation
+    .replace(/"/g, '\\"')                          // Escape quotes
+    .replace(/\\/g, '\\\\')                        // Escape backslashes  
+    .replace(/\n/g, ' ')                          // Replace newlines with spaces
+    .replace(/\r/g, ' ')                          // Replace carriage returns with spaces
+    .replace(/\t/g, ' ')                          // Replace tabs with spaces
+    .trim()                                       // Remove leading/trailing whitespace
+    .substring(0, 500);                           // Limit length to prevent huge URLs
 }
 
 /**
@@ -52,7 +71,7 @@ export async function handleCrossmintBuy(
       );
       return;
     }
-
+    
     console.log(`✅ Product found: ${product.title}`);
     console.log(`🔗 Product URL: ${product.amazonUrl}`);
 
@@ -92,7 +111,7 @@ function getSelectedProduct(userId: number, index: number): AmazonProduct | null
     console.log(`✅ Found cached product: ${product.title}`);
     console.log(`🔗 Amazon URL: ${product.amazonUrl}`);
     return product;
-    
+
   } catch (error) {
     console.error('Error getting cached product:', error);
     return null;
@@ -127,28 +146,28 @@ async function startWalletCheckoutFlow(
 
       // Send wallet creation message
       const message = '🔐 *Wallet Required*\n\n' +
-        `To purchase ${escapeMarkdown(product.title)}, you need a Crossmint wallet\\.\n\n` +
+          `To purchase ${escapeMarkdown(product.title)}, you need a Crossmint wallet\\.\n\n` +
         '*Click below to create your wallet and return here to complete your purchase\\.*';
-
-      await bot.sendMessage(chatId, message, {
-        parse_mode: 'MarkdownV2',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: '🚀 Create Wallet',
-                url: authLink
-              }
-            ],
-            [
-              {
-                text: '❌ Cancel',
-                callback_data: 'checkout_cancel'
-              }
+  
+        await bot.sendMessage(chatId, message, {
+          parse_mode: 'MarkdownV2',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '🚀 Create Wallet',
+                  url: authLink
+                }
+              ],
+              [
+                {
+                  text: '❌ Cancel',
+                  callback_data: 'checkout_cancel'
+                }
+              ]
             ]
-          ]
-        }
-      });
+          }
+        });
       return;
     }
 
@@ -160,7 +179,7 @@ async function startWalletCheckoutFlow(
       const topupLink = crossmintWalletService.generateTopUpLink(userId, 50, 'USD');
       
       const message = '💳 *Insufficient Funds*\n\n' +
-        `You need funds in your wallet to purchase ${escapeMarkdown(product.title)}\\.\n\n` +
+          `You need funds in your wallet to purchase ${escapeMarkdown(product.title)}\\.\n\n` +
         '*Add funds to your wallet and return here to complete your purchase\\.*';
 
       const keyboard = [];
@@ -175,15 +194,15 @@ async function startWalletCheckoutFlow(
         callback_data: 'checkout_cancel'
       }]);
 
-      await bot.sendMessage(chatId, message, {
-        parse_mode: 'MarkdownV2',
-        reply_markup: {
+        await bot.sendMessage(chatId, message, {
+          parse_mode: 'MarkdownV2',
+          reply_markup: {
           inline_keyboard: keyboard
-        }
-      });
-      return;
-    }
-
+          }
+        });
+        return;
+      }
+      
     // User has wallet and funds - proceed to collect shipping info
     const session: UserSession = {
       userId,
@@ -197,7 +216,7 @@ async function startWalletCheckoutFlow(
     }
     
     userSessions.set(userId, session);
-
+        
     // If we already have email from wallet, skip to address
     if (session.email) {
       session.step = 'collecting_address';
@@ -224,19 +243,19 @@ async function requestEmail(bot: TelegramBot, chatId: number, product: AmazonPro
   const message = '📧 *Email Required*\n\n' +
     `To purchase ${escapeMarkdown(product.title)}, please provide your email address for order confirmation\\.\n\n` +
     '*Please type your email address:*';
-
-  await bot.sendMessage(chatId, message, {
-    parse_mode: 'MarkdownV2',
-    reply_markup: {
+  
+        await bot.sendMessage(chatId, message, {
+          parse_mode: 'MarkdownV2',
+          reply_markup: {
       inline_keyboard: [[
-        {
-          text: '❌ Cancel',
-          callback_data: 'checkout_cancel'
-        }
+                {
+                  text: '❌ Cancel',
+                  callback_data: 'checkout_cancel'
+                }
       ]]
-    }
-  });
-}
+          }
+        });
+      }
 
 /**
  * Request shipping address from user
@@ -248,17 +267,17 @@ async function requestShippingAddress(bot: TelegramBot, chatId: number, product:
     '*Example:* John Smith \\| 123 Main St \\| New York \\| NY \\| 10001 \\| US\n\n' +
     '*Note:* Currently only US shipping addresses are supported\\.';
 
-  await bot.sendMessage(chatId, message, {
-    parse_mode: 'MarkdownV2',
-    reply_markup: {
+    await bot.sendMessage(chatId, message, {
+      parse_mode: 'MarkdownV2',
+      reply_markup: {
       inline_keyboard: [[
-        {
-          text: '❌ Cancel',
-          callback_data: 'checkout_cancel'
-        }
+            {
+              text: '❌ Cancel',
+              callback_data: 'checkout_cancel'
+            }
       ]]
-    }
-  });
+      }
+    });
 }
 
 /**
@@ -404,6 +423,17 @@ async function createHeadlessOrder(
   session: UserSession
 ): Promise<void> {
   try {
+    console.log(`\n🚀 === CREATE HEADLESS ORDER START ===`);
+    console.log(`👤 User ID: ${userId}`);
+    console.log(`💬 Chat ID: ${chatId}`);
+    console.log(`📋 Session:`, {
+      userId: session.userId,
+      productTitle: session.selectedProduct?.title,
+      email: session.email,
+      step: session.step
+    });
+    console.log(`=== CREATE HEADLESS ORDER START END ===\n`);
+
     if (!session.selectedProduct || !session.email || !session.physicalAddress) {
       throw new Error('Missing required session data');
     }
@@ -485,13 +515,69 @@ async function createHeadlessOrder(
         `*Order ID:* ${escapeMarkdown(orderId)}\n` +
         `*Product:* ${escapeMarkdown(productTitle)}\n` +
         `*Total:* ${escapeMarkdown(totalAmount)} ${escapeMarkdown(totalCurrency)}\n\n` +
-        `⏳ Signing transaction\\.\\.\\. Please wait\\.`,
+        `⏳ Checking delegation and signing transaction\\.\\.\\. Please wait\\.`,
         { parse_mode: 'MarkdownV2' }
       );
 
-      // Sign the transaction automatically
-      console.log(`🔐 Signing transaction for order ${orderId}`);
+      console.log(`🔐 Processing transaction for order ${orderId}`);
+      
+      // Get payment chain info
       const paymentChain = order?.payment?.preparation?.chain || 'base-sepolia';
+      
+      // Check if user has delegated signing to the bot
+      const canAutoSign = await crossmintDelegationService.canAutoSign(userId);
+      console.log(`\n🤖 === AUTO-SIGN CHECK ===`);
+      console.log(`👤 User: ${userId}`);
+      console.log(`✅ Can auto-sign: ${canAutoSign}`);
+      console.log(`=== AUTO-SIGN CHECK END ===\n`);
+      
+      if (canAutoSign) {
+        try {
+          console.log(`🚀 Attempting auto-sign for user ${userId}...`);
+          // Auto-sign the transaction with bot signer
+          const autoSignResult = await crossmintDelegationService.signTransactionWithBotSigner(
+            userWallet.walletAddress,
+            serializedTransaction,
+            paymentChain
+          );
+          console.log(`🎯 Auto-sign result:`, autoSignResult);
+          
+          if (autoSignResult.success) {
+            console.log(`✅ Auto-signed transaction for user ${userId} - immediate purchase completed!`);
+            
+            // Send immediate success message
+            await bot.sendMessage(
+              chatId,
+              `🎉 *Purchase Completed Instantly!*\n\n` +
+              `✅ Payment was automatically approved using fast shopping.\n` +
+              `📦 Your order is being processed.\n\n` +
+              `*Order ID:* \`${escapeMarkdown(orderId)}\`\n` +
+              `*Amount:* ${escapeMarkdown(totalAmount)} ${escapeMarkdown(totalCurrency)}\n\n` +
+              `You will receive email updates about shipping.`,
+              { parse_mode: 'Markdown' }
+            );
+            
+            // Start order monitoring
+            startOrderMonitoring(orderId, userId);
+            
+            // Clean up session and return - auto-signing completed successfully
+            userSessions.delete(userId);
+            return;
+          } else {
+            console.log(`❌ Auto-sign failed for user ${userId}, falling back to manual approval`);
+            // Fall through to manual approval flow
+          }
+        } catch (autoSignError) {
+          console.error(`❌ Auto-sign error for user ${userId}:`, autoSignError);
+          // Fall through to manual approval flow
+        }
+      } else {
+        console.log(`⚠️ Auto-sign not available for user ${userId} - using manual approval`);
+      }
+      
+      // Fallback: Manual approval flow (existing code)
+      console.log(`🔐 Using manual approval flow for order ${orderId}`);
+      
       const signingResult = await crossmintHeadlessCheckoutService.signOrderTransaction(
         userWallet.walletAddress,
         serializedTransaction,
@@ -506,20 +592,26 @@ async function createHeadlessOrder(
         if (signingResult.status === 'awaiting-approval') {
           console.log(`🔐 Transaction needs approval: ${signingResult.transactionId}`);
           
-          // Create approval state (similar to topup flow)
-          const approvalState = Buffer.from(JSON.stringify({ 
+          // Create approval state (similar to topup flow) with sanitized data
+          const sanitizedApprovalData = { 
             userId,
             transactionId: signingResult.transactionId,
-            orderId: orderId,
-            walletAddress: userWallet.walletAddress,
-            crossmintUserId: userWallet.crossmintUserId,
-            email: userWallet.email,
-            authToken: userWallet.authToken,
-            productTitle: productTitle,
-            totalAmount: totalAmount,
-            totalCurrency: totalCurrency
-          })).toString('base64');
+            orderId: sanitizeForJson(orderId),
+            walletAddress: sanitizeForJson(userWallet.walletAddress),
+            crossmintUserId: sanitizeForJson(userWallet.crossmintUserId),
+            email: sanitizeForJson(userWallet.email),
+            authToken: sanitizeForJson(userWallet.authToken),
+            productTitle: sanitizeForJson(productTitle),
+            totalAmount: sanitizeForJson(totalAmount),
+            totalCurrency: sanitizeForJson(totalCurrency)
+          };
           
+          console.log("🧹 Sanitized approval data:", {
+            ...sanitizedApprovalData,
+            authToken: sanitizedApprovalData.authToken ? '[REDACTED]' : null
+          });
+          
+          const approvalState = Buffer.from(JSON.stringify(sanitizedApprovalData)).toString('base64');
           const approvalUrl = `${config.webApp.url}/approve?state=${approvalState}`;
           
           // Send approval message to user
@@ -619,17 +711,17 @@ async function createHeadlessOrder(
       const successMessage = '✅ *Order Created Successfully*\n\n' +
         `*Order ID:* ${escapeMarkdown(orderId)}\n` +
         `*Product:* ${escapeMarkdown(productTitle)}\n` +
-        `*Total:* ${escapeMarkdown(totalAmount)} ${escapeMarkdown(totalCurrency)}\n` +
-        `*Status:* ${escapeMarkdown(orderStatus)}\n\n` +
+      `*Total:* ${escapeMarkdown(totalAmount)} ${escapeMarkdown(totalCurrency)}\n` +
+      `*Status:* ${escapeMarkdown(orderStatus)}\n\n` +
         '*Next Steps:*\n' +
         '• Payment will be processed using your USDC balance\n' +
         '• You will receive order confirmation via email\n' +
         '• Your product will be shipped to the provided address\n\n' +
         '*Thank you for your purchase\\!*';
 
-      await bot.sendMessage(chatId, successMessage, {
-        parse_mode: 'MarkdownV2',
-        reply_markup: {
+    await bot.sendMessage(chatId, successMessage, {
+      parse_mode: 'MarkdownV2',
+      reply_markup: {
           inline_keyboard: [
             [
               {
@@ -638,14 +730,14 @@ async function createHeadlessOrder(
               }
             ],
             [
-              {
-                text: '🔍 Search More Products',
-                callback_data: 'search_more'
-              }
+          {
+            text: '🔍 Search More Products',
+            callback_data: 'search_more'
+          }
             ]
           ]
-        }
-      });
+      }
+    });
 
       // Start automatic order monitoring
       startOrderMonitoring(orderId, userId);
@@ -691,7 +783,7 @@ async function createHeadlessOrder(
         }
       });
     } else if (errorMessage.includes('US shipping addresses')) {
-      await bot.sendMessage(chatId, 
+    await bot.sendMessage(chatId, 
         '❌ *Shipping Restriction*\n\n' +
         'Currently only US shipping addresses are supported\\.\n\n' +
         'Please contact support for international shipping options\\.',
@@ -710,7 +802,7 @@ async function createHeadlessOrder(
     } else {
       // General error message
       const errorMsg = '❌ *Order Creation Failed*\n\n' +
-        `Error: ${escapeMarkdown(errorMessage)}\n\n` +
+      `Error: ${escapeMarkdown(errorMessage)}\n\n` +
         'Please try again or contact support\\.';
 
       await bot.sendMessage(chatId, errorMsg, { 

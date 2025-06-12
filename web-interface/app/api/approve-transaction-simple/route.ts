@@ -33,72 +33,27 @@ export async function POST(request: NextRequest) {
     console.log(`🔐 Signer: ${signerLocator}`);
     console.log(`🔄 Trigger WebAuthn: ${triggerWebauthn}`);
 
-    // For passkey wallets, we might need a different approach
-    // Let's try to submit a minimal approval that triggers the WebAuthn flow
+    // For passkey wallets, we need to trigger the approval through the Client SDK
+    // Instead of trying to manually construct signatures, let's return instructions
+    // for the frontend to handle this properly with the SDK
     
     const approvalApiUrl = `${CROSSMINT_BASE_URL}/wallets/${walletAddress}/transactions/${transactionId}/approvals`;
     
-    // Try submitting without signature first - this might trigger the WebAuthn flow
-    const minimalApprovalPayload = {
-      approvals: [{
-        signer: signerLocator,
-        // We'll let Crossmint handle the signature generation
-        metadata: {
-          userAgent: request.headers.get('user-agent') || 'Crossmint-Bot/1.0',
-          origin: request.headers.get('origin') || 'http://localhost:3000'
-        }
-      }]
-    };
-
-    console.log('📦 Minimal approval payload:', JSON.stringify(minimalApprovalPayload, null, 2));
-
-    try {
-      const response = await axios.post(
-        approvalApiUrl,
-        minimalApprovalPayload,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': CROSSMINT_API_KEY,
-          },
-          timeout: 30000,
-        }
-      );
-
-      console.log(`✅ Minimal approval submitted: ${response.status}`);
-      console.log('📦 Response:', JSON.stringify(response.data, null, 2));
-
-      return NextResponse.json({
-        success: true,
-        transaction: response.data,
-        method: 'minimal-approval'
-      });
-
-    } catch (minimalError: any) {
-      console.log('❌ Minimal approval failed, trying alternative approach...');
-      
-      if (minimalError.response) {
-        console.log('Error details:', {
-          status: minimalError.response.status,
-          data: minimalError.response.data
-        });
-        
-        // If the error indicates we need a signature, provide helpful guidance
-        if (minimalError.response.status === 400) {
-          const errorMessage = minimalError.response.data?.message || '';
-          if (errorMessage.includes('signature') || errorMessage.includes('approval')) {
-            return NextResponse.json({
-              error: 'Transaction approval requires WebAuthn signature. Please ensure your browser supports WebAuthn and try again.',
-              needsClientSignature: true,
-              signerLocator: signerLocator,
-              transactionId: transactionId
-            }, { status: 400 });
-          }
-        }
+    console.log('📋 Cannot directly approve passkey transactions from server side');
+    console.log('📋 Passkey transactions require client-side WebAuthn interaction');
+    
+    // Return information for client-side handling
+    return NextResponse.json({
+      error: 'Passkey transactions require client-side approval',
+      requiresClientSideApproval: true,
+      message: 'This transaction uses a passkey signer and must be approved through the Crossmint Client SDK in the browser.',
+      instructions: {
+        method: 'Use wallet.signMessage() or alternative signing method',
+        signerLocator: signerLocator,
+        transactionId: transactionId,
+        walletAddress: walletAddress
       }
-      
-      throw minimalError;
-    }
+    }, { status: 400 });
 
   } catch (error: any) {
     console.error('❌ Error in simplified approval:', error);

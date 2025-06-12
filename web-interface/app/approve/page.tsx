@@ -23,15 +23,111 @@ function parseApprovalState(encodedState: string | null): {
   totalCurrency?: string
 } | null {
     if (!encodedState) return null;
+    
     try {
-        const decodedJson = Buffer.from(encodedState, 'base64').toString('utf-8');
-        const parsed = JSON.parse(decodedJson);
-        if (parsed && typeof parsed.userId === 'number' && parsed.transactionId && parsed.orderId) {
-            return parsed;
+        console.log("🔍 Parsing approval state from URL...");
+        console.log("Raw encoded state length:", encodedState.length);
+        
+        // Decode from base64
+        let decodedJson: string;
+        try {
+            decodedJson = Buffer.from(encodedState, 'base64').toString('utf-8');
+            console.log("✅ Base64 decode successful, length:", decodedJson.length);
+        } catch (decodeError) {
+            console.error("❌ Base64 decode failed:", decodeError);
+            // Try URL decoding as fallback
+            try {
+                decodedJson = decodeURIComponent(encodedState);
+                console.log("✅ URL decode fallback successful");
+            } catch (urlDecodeError) {
+                console.error("❌ URL decode fallback also failed:", urlDecodeError);
+                return null;
+            }
         }
-        return null;
+        
+        // Clean control characters that can break JSON parsing
+        const cleanedJson = decodedJson
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+            .replace(/\\n/g, '\\\\n')                     // Escape literal \n
+            .replace(/\\r/g, '\\\\r')                     // Escape literal \r
+            .replace(/\\t/g, '\\\\t')                     // Escape literal \t
+            .replace(/\\/g, '\\\\')                       // Escape backslashes
+            .trim();                                      // Remove leading/trailing whitespace
+            
+        console.log("🧹 Cleaned JSON string (first 200 chars):", cleanedJson.substring(0, 200));
+        
+        // Parse JSON with better error handling
+        let parsed: any;
+        try {
+            parsed = JSON.parse(cleanedJson);
+            console.log("✅ JSON parse successful");
+        } catch (jsonError) {
+            console.error("❌ JSON parse failed after cleaning:", jsonError);
+            console.log("Failed JSON string (first 500 chars):", cleanedJson.substring(0, 500));
+            
+            // Try to extract data using regex as last resort
+            try {
+                console.log("🔄 Attempting regex extraction as fallback...");
+                const userIdMatch = cleanedJson.match(/"userId"\s*:\s*(\d+)/);
+                const transactionIdMatch = cleanedJson.match(/"transactionId"\s*:\s*"([^"]+)"/);
+                const orderIdMatch = cleanedJson.match(/"orderId"\s*:\s*"([^"]+)"/);
+                
+                if (userIdMatch && transactionIdMatch && orderIdMatch) {
+                    console.log("✅ Regex extraction successful");
+                    return {
+                        userId: parseInt(userIdMatch[1]),
+                        transactionId: transactionIdMatch[1],
+                        orderId: orderIdMatch[1],
+                        // Try to extract other optional fields
+                        walletAddress: cleanedJson.match(/"walletAddress"\s*:\s*"([^"]+)"/)?.[1],
+                        crossmintUserId: cleanedJson.match(/"crossmintUserId"\s*:\s*"([^"]+)"/)?.[1],
+                        email: cleanedJson.match(/"email"\s*:\s*"([^"]+)"/)?.[1],
+                        authToken: cleanedJson.match(/"authToken"\s*:\s*"([^"]+)"/)?.[1],
+                        productTitle: cleanedJson.match(/"productTitle"\s*:\s*"([^"]+)"/)?.[1],
+                        totalAmount: cleanedJson.match(/"totalAmount"\s*:\s*"([^"]+)"/)?.[1],
+                        totalCurrency: cleanedJson.match(/"totalCurrency"\s*:\s*"([^"]+)"/)?.[1],
+                    };
+                }
+            } catch (regexError) {
+                console.error("❌ Regex extraction also failed:", regexError);
+            }
+            
+            return null;
+        }
+        
+        // Validate required fields
+        if (parsed && 
+            typeof parsed.userId === 'number' && 
+            typeof parsed.transactionId === 'string' && 
+            typeof parsed.orderId === 'string' &&
+            parsed.userId > 0 &&
+            parsed.transactionId.trim() !== '' &&
+            parsed.orderId.trim() !== '') {
+            
+            console.log("✅ Approval state validation successful");
+            console.log("Parsed data:", {
+                userId: parsed.userId,
+                transactionId: parsed.transactionId,
+                orderId: parsed.orderId,
+                hasWalletAddress: !!parsed.walletAddress,
+                hasProductTitle: !!parsed.productTitle
+            });
+            
+            return parsed;
+        } else {
+            console.error("❌ Invalid approval state structure:", {
+                hasUserId: 'userId' in parsed,
+                hasTransactionId: 'transactionId' in parsed,
+                hasOrderId: 'orderId' in parsed,
+                userIdType: typeof parsed.userId,
+                parsed: parsed
+            });
+            return null;
+        }
+        
     } catch (error) {
-        console.error("Failed to parse approval state from URL.", error);
+        console.error("❌ Failed to parse approval state from URL:", error);
+        console.log("Raw encoded state (first 100 chars):", encodedState.substring(0, 100));
         return null;
     }
 }
@@ -193,135 +289,141 @@ function ApprovalPage() {
       console.log("Available wallet methods:", walletMethods);
       console.log("Wallet object keys:", Object.keys(crossmintWallet));
       
+      // Deep inspection of wallet object structure
+      console.log("Wallet object type:", typeof crossmintWallet);
+      console.log("Wallet constructor:", crossmintWallet.constructor?.name);
+      console.log("Wallet prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(crossmintWallet)));
+      
+      // Check for nested objects that might contain signing methods
+      Object.keys(crossmintWallet).forEach(key => {
+        const value = crossmintWallet[key];
+        if (value && typeof value === 'object') {
+          console.log(`Wallet.${key} methods:`, Object.getOwnPropertyNames(value).filter(name => 
+            typeof value[name] === 'function'
+          ));
+        }
+      });
+      
+      // Check wallet capabilities and choose the right approach
+      console.log("🔍 Checking wallet capabilities...");
+      console.log("Has signMessage:", typeof crossmintWallet.signMessage === 'function');
+      console.log("Has approveTransaction:", typeof crossmintWallet.approveTransaction === 'function');
+      
       // Let's try different approaches specific to Crossmint
       let approvalResult: any = null;
       let method = 'unknown';
       
+      // Simple approach: Just use wallet.approveTransaction and intercept the API call
+      // to fix the signature format issue at the network level
       try {
-        // Method 1: Direct transaction approval (if available)
-        if (crossmintWallet.approveTransaction) {
-          console.log("🔄 Method 1: Using wallet.approveTransaction");
-          method = 'approveTransaction';
-          approvalResult = await crossmintWallet.approveTransaction(approvalData.transactionId);
-        }
-        // Method 2: Sign the specific message hash
-        else if (crossmintWallet.signMessage) {
-          console.log("🔄 Method 2: Using wallet.signMessage");
-          method = 'signMessage';
-          approvalResult = await crossmintWallet.signMessage(pendingMessage);
-        }
-        // Method 3: Generic sign method
-        else if (crossmintWallet.sign) {
-          console.log("🔄 Method 3: Using wallet.sign");
-          method = 'sign';
-          approvalResult = await crossmintWallet.sign(pendingMessage);
-        }
-        // Method 4: Send transaction (might trigger approval)
-        else if (crossmintWallet.sendTransaction) {
-          console.log("🔄 Method 4: Using wallet.sendTransaction");
-          method = 'sendTransaction';
-          // Get transaction details from our data
-          const txData = transactionDetails?.params?.calls?.[0];
-          if (txData) {
-            approvalResult = await crossmintWallet.sendTransaction(txData);
-          } else {
-            throw new Error('No transaction data available for sendTransaction');
-          }
-        }
-        // Method 5: Try to access underlying provider
-        else if (crossmintWallet.provider) {
-          console.log("🔄 Method 5: Using underlying provider");
-          method = 'provider';
-          const provider = crossmintWallet.provider;
-          if (provider.request) {
-            approvalResult = await provider.request({
-              method: 'eth_sign',
-              params: [approvalData.walletAddress, pendingMessage]
-            });
-          } else {
-            throw new Error('Provider does not support request method');
-          }
-        }
-        // Method 6: Check if there's a transactions property
-        else if (crossmintWallet.transactions) {
-          console.log("🔄 Method 6: Using wallet.transactions");
-          method = 'transactions';
-          const transactions = crossmintWallet.transactions;
-          if (transactions.approve) {
-            approvalResult = await transactions.approve(approvalData.transactionId);
-          } else {
-            throw new Error('Transactions object does not have approve method');
-          }
-        }
-        else {
-          // Last resort: Try to trigger approval through direct API call
-          console.log("🔄 Method 7: No direct wallet methods available, using API approach");
-          method = 'api-direct';
-          
-          // Try the simplified approval endpoint
-          const response = await fetch('/api/approve-transaction-simple', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              walletAddress: approvalData.walletAddress,
-              transactionId: approvalData.transactionId,
-              signerLocator: signerLocator,
-              triggerWebauthn: true
-            })
-          });
-          
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `HTTP ${response.status}`);
-          }
-          
-          approvalResult = await response.json();
-        }
+        console.log("🔄 Using wallet.approveTransaction (fixing signature format via network interception)");
+        method = 'approveTransaction';
         
-        console.log(`✅ Approval successful using method: ${method}`);
-        console.log("Approval result:", approvalResult);
-        
-        // Notify bot that approval completed
-        if (BOT_API_URL) {
-          try {
-            await fetch(`${BOT_API_URL}/api/webhook/transaction-approved`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                userId: approvalData.userId,
-                transactionId: approvalData.transactionId,
-                orderId: approvalData.orderId,
-                status: 'approved',
-                walletAddress: approvalData.walletAddress,
-                method: method
-              })
-            });
-            console.log("✅ Bot notified of approval completion");
-          } catch (webhookError) {
-            console.warn("⚠️ Failed to notify bot:", webhookError);
-            // Don't fail the approval process if webhook fails
+        // Intercept the Crossmint API calls to fix signature format
+        const originalFetch = window.fetch;
+        window.fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+          const url = typeof input === 'string' ? input : input.toString();
+          
+          // Intercept Crossmint approval API calls
+          if (url.includes('staging.crossmint.com') && url.includes('/approvals') && init?.method === 'POST') {
+            console.log("🔧 Intercepting Crossmint approval API call to fix signature format");
+            
+            try {
+              const body = init.body ? JSON.parse(init.body as string) : {};
+              
+              // Fix signature format: convert hex to decimal strings
+              if (body.approvals && Array.isArray(body.approvals)) {
+                body.approvals.forEach((approval: any) => {
+                  if (approval.signature && approval.signature.r && approval.signature.s) {
+                    // Convert hex to decimal if needed
+                    if (typeof approval.signature.r === 'string' && approval.signature.r.startsWith('0x')) {
+                      console.log("🔧 Converting signature.r from hex to decimal");
+                      approval.signature.r = BigInt(approval.signature.r).toString();
+                    }
+                    if (typeof approval.signature.s === 'string' && approval.signature.s.startsWith('0x')) {
+                      console.log("🔧 Converting signature.s from hex to decimal");
+                      approval.signature.s = BigInt(approval.signature.s).toString();
+                    }
+                  }
+                });
+              }
+              
+              console.log("🔧 Fixed approval payload:", JSON.stringify(body, null, 2));
+              
+              // Make the call with fixed payload
+              const fixedInit = {
+                ...init,
+                body: JSON.stringify(body)
+              };
+              
+              const response = await originalFetch(input, fixedInit);
+              
+              // Restore original fetch
+              window.fetch = originalFetch;
+              
+              return response;
+            } catch (interceptError) {
+              console.error("❌ Error intercepting API call:", interceptError);
+              // Restore original fetch and fall back to original call
+              window.fetch = originalFetch;
+              return originalFetch(input, init);
+            }
           }
+          
+          // For all other calls, use original fetch
+          return originalFetch(input, init);
+        };
+        
+        // Now use the wallet's approveTransaction method normally
+        console.log("🔐 Triggering wallet approval with signature format fix...");
+        approvalResult = await crossmintWallet.approveTransaction(approvalData.transactionId);
+        console.log("✅ Approval completed:", approvalResult);
+        
+                 // Restore original fetch (just in case)
+         window.fetch = originalFetch;
+         
+         console.log(`✅ Approval successful using method: ${method}`);
+         console.log("Approval result:", approvalResult);
+         
+         // Notify bot that approval completed
+         if (BOT_API_URL) {
+           try {
+             await fetch(`${BOT_API_URL}/api/webhook/transaction-approved`, {
+               method: 'POST',
+               headers: {
+                 'Content-Type': 'application/json',
+               },
+               body: JSON.stringify({
+                 userId: approvalData.userId,
+                 transactionId: approvalData.transactionId,
+                 orderId: approvalData.orderId,
+                 status: 'approved',
+                 walletAddress: approvalData.walletAddress,
+                 method: method
+               })
+             });
+             console.log("✅ Bot notified of approval completion");
+           } catch (webhookError) {
+             console.warn("⚠️ Failed to notify bot:", webhookError);
+             // Don't fail the approval process if webhook fails
+           }
+         }
+
+         setApprovalStatus('success');
+         console.log("✅ Transaction approved successfully");
+         
+               } catch (methodError) {
+          console.error(`❌ Method ${method} failed:`, methodError);
+          throw new Error(`Approval method '${method}' failed: ${methodError instanceof Error ? methodError.message : String(methodError)}`);
         }
 
-        setApprovalStatus('success');
-        console.log("✅ Transaction approved successfully");
-        
-      } catch (methodError) {
-        console.error(`❌ Method ${method} failed:`, methodError);
-        throw new Error(`Approval method '${method}' failed: ${methodError instanceof Error ? methodError.message : String(methodError)}. Available wallet methods: ${walletMethods.slice(0, 10).join(', ')}`);
+      } catch (error) {
+        console.error('❌ Error approving transaction:', error);
+        setApprovalStatus('pending');
+        setError(`Failed to approve transaction: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        setIsApproving(false);
       }
-
-    } catch (error) {
-      console.error('❌ Error approving transaction:', error);
-      setApprovalStatus('pending');
-      setError(`Failed to approve transaction: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setIsApproving(false);
-    }
   }, [approvalData, wallet, user, pendingMessage, signerLocator]);
 
   // Render logic

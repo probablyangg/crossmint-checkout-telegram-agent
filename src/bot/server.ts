@@ -203,22 +203,22 @@ export class BotHttpServer {
                 console.log(`✅ Real USDC balance verified: ${usdcBalance} USDC`);
                 
                 // Update memory with real balance data for caching
-                (memory as any).walletInfo.lastTopUpAmount = amount;
-                (memory as any).walletInfo.lastTopUpAt = Date.now();
+            (memory as any).walletInfo.lastTopUpAmount = amount;
+            (memory as any).walletInfo.lastTopUpAt = Date.now();
                 (memory as any).walletInfo.lastVerifiedBalance = usdcBalance;
                 (memory as any).walletInfo.lastBalanceCheck = Date.now();
-                
+
                 // Notify user with real balance confirmation
-                await telegramBot.sendMessage(
-                  userId,
-                  `💰 *Payment Successful!*\n\n` +
-                  `✅ $${amount} ${currency} has been added to your wallet.\n` +
+            await telegramBot.sendMessage(
+              userId,
+              `💰 *Payment Successful!*\n\n` +
+              `✅ $${amount} ${currency} has been added to your wallet.\n` +
                   `💰 *Current Balance:* ${parseFloat(usdcBalance).toFixed(2)} USDC\n` +
-                  `🔄 Transaction ID: \`${transactionId}\`\n\n` +
-                  `Your wallet is now funded and ready for shopping!\n` +
-                  `Use /search to find products or /balance to check your current balance.`,
-                  { parse_mode: 'Markdown' }
-                );
+              `🔄 Transaction ID: \`${transactionId}\`\n\n` +
+              `Your wallet is now funded and ready for shopping!\n` +
+              `Use /search to find products or /balance to check your current balance.`,
+              { parse_mode: 'Markdown' }
+            );
               } else {
                 // Fallback if balance fetch fails
                 console.log(`⚠️ Could not verify balance for user ${userId}, using fallback notification`);
@@ -405,6 +405,84 @@ export class BotHttpServer {
       }
     });
 
+    // Webhook endpoint for delegation completion
+    this.app.post('/api/webhook/delegation-completed', async (req: Request, res: Response): Promise<void> => {
+      try {
+        const { userId, botSigner, status } = req.body;
+
+        if (!userId || !botSigner || !status) {
+          res.status(400).json({
+            error: 'Missing required fields: userId, botSigner, status'
+          });
+          return;
+        }
+        
+        const numericUserId = Number(userId);
+        if (isNaN(numericUserId)) {
+          console.error(`❌ Invalid userId format: ${userId}. Must be a number.`);
+          res.status(400).json({
+            error: 'Invalid userId format. Must be a number.'
+          });
+          return;
+        }
+
+        console.log(`🤖 Delegation completed for user ${userId}: ${status}`);
+
+        if (status === 'success') {
+          // Notify user on Telegram that delegation was successful
+          await telegramBot.sendMessage(
+            numericUserId,
+            `✅ *Fast Shopping Enabled\\!*\n\n` +
+            `🤖 The bot can now automatically sign transactions for instant purchases\\.\n\n` +
+            `*Benefits:*\n` +
+            `• No more manual approvals\n` +
+            `• Instant checkout experience\n` +
+            `• Seamless shopping\n\n` +
+            `You can revoke this permission anytime\\. Try searching for products with \\/search to see the difference\\!`,
+            { 
+              parse_mode: 'MarkdownV2',
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: '🔍 Try Fast Shopping',
+                      callback_data: 'search_more'
+                    }
+                  ]
+                ]
+              }
+            }
+          );
+          
+          console.log(`✅ User ${userId} notified of successful delegation`);
+        } else {
+          // Handle delegation failure
+          await telegramBot.sendMessage(
+            numericUserId,
+            `❌ *Delegation Failed*\n\n` +
+            `Unable to enable fast shopping\\. Please try again or contact support\\.`,
+            { parse_mode: 'MarkdownV2' }
+          );
+          
+          console.log(`❌ User ${userId} notified of delegation failure`);
+        }
+
+        res.json({
+          success: true,
+          message: 'Delegation completion processed successfully',
+          userId: numericUserId,
+          status
+        });
+
+      } catch (error) {
+        console.error('❌ Error processing delegation completion:', error);
+        res.status(500).json({
+          error: 'Internal server error',
+          message: 'Failed to process delegation completion'
+        });
+      }
+    });
+
     // Webhook endpoint for retrieving user wallet status (for web interface)
     this.app.get('/api/user/:userId/wallet', async (req: Request, res: Response): Promise<void> => {
       try {
@@ -475,6 +553,7 @@ export class BotHttpServer {
         console.log(`   • POST /api/logout`);
         console.log(`   • POST /api/webhook/payment-completed`);
         console.log(`   • POST /api/webhook/transaction-approved`);
+        console.log(`   • POST /api/webhook/delegation-completed`);
         console.log(`   • GET  /api/user/:userId/wallet`);
         console.log(`   • GET  /health`);
         this.isRunning = true;

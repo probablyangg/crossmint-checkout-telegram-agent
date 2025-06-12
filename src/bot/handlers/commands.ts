@@ -1,8 +1,8 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { telegramBot } from '../platforms/telegram.js';
-import { clearUserMemory, getUserMemory } from '../../utils/memory.js';
 import { handleSearchCommand, handleSearchCallback, handleAutoSearchCallback } from './searchHandler.js';
 import { handleCrossmintBuy, handleCheckoutCancel } from './checkoutHandler.js';
+import * as memoryUtils from '../../utils/memory.js';
 import { crossmintWalletService } from '../../commerce/crossmint/wallet.js';
 import { config } from '../../utils/config.js';
 import { escapeMarkdown } from '../../commerce/search/formatting.js';
@@ -20,6 +20,13 @@ export class CommandHandlers {
   }
 
   /**
+   * Helper to generate delegation URL
+   */
+  private static getDelegationUrl(userId: number): string {
+    return `${config.webApp.url}/delegate?userId=${userId}`;
+  }
+
+  /**
    * Initialize all command handlers
    */
   public static init(): void {
@@ -31,6 +38,7 @@ export class CommandHandlers {
     this.setupSearchCommand();
     this.setupMemoryCommands();
     this.setupWalletCommands();
+    this.setupDelegationCommands();
     this.setupCallbackHandlers();
     
     // Future commerce commands will be added here:
@@ -105,6 +113,7 @@ I'm your AI-powered shopping assistant. I can help you with:
 • /login - Create/connect your Crossmint wallet
 • /balance - Check your wallet balance
 • /topup - Add funds to your wallet
+• /delegate - Enable fast shopping (auto-sign transactions)
 • /logout - Sign out and clear session data
 
 🧠 *Memory Commands:*
@@ -177,9 +186,10 @@ Want to chat? Just send me any message! 💬
   }
 
   /**
-   * Handle /search command for Amazon product search
+   * Handle search-related commands
    */
   private static setupSearchCommand(): void {
+    // /search command
     telegramBot.onText(/\/search(.*)/, async (msg: TelegramBot.Message) => {
       await handleSearchCommand(telegramBot.getBotInstance(), msg);
     });
@@ -199,7 +209,7 @@ Want to chat? Just send me any message! 💬
         return;
       }
 
-      const memory = getUserMemory(userId);
+      const memory = memoryUtils.getUserMemory(userId);
       
       if (!memory || memory.messages.length === 0) {
         await telegramBot.sendMessage(chatId, 
@@ -246,7 +256,7 @@ Want to chat? Just send me any message! 💬
         return;
       }
 
-      clearUserMemory(userId);
+      memoryUtils.clearUserMemory(userId);
       await telegramBot.sendMessage(chatId, 
         '🗑️ *Memory Cleared*\n\n' +
         'I\'ve forgotten our previous conversations\\. We can start fresh\\!',
@@ -413,7 +423,7 @@ Want to chat? Just send me any message! 💬
         if (!userId) {
           await telegramBot.sendMessage(chatId, 'Could not identify you. Please try again.');
           return;
-        }
+  }
 
         // Check if user is actually logged in
         if (!crossmintWalletService.isUserLoggedIn(userId)) {
@@ -437,7 +447,7 @@ Want to chat? Just send me any message! 💬
 
         if (logoutSuccess) {
           // Also clear user memory for complete cleanup
-          clearUserMemory(userId);
+          memoryUtils.clearUserMemory(userId);
 
           // Send confirmation message
           const address = walletAddress ? 
@@ -475,7 +485,73 @@ Want to chat? Just send me any message! 💬
   }
 
   /**
-   * Set up callback query handlers for search pagination and actions
+   * Handle delegation-related commands
+   */
+  private static setupDelegationCommands(): void {
+    // /delegate command
+    telegramBot.onText(/\/delegate/, async (msg: TelegramBot.Message) => {
+      const chatId = msg.chat.id;
+      const userId = msg.from?.id;
+
+      if (!userId) {
+        await telegramBot.sendMessage(chatId, 'Could not get user ID.');
+        return;
+      }
+
+      await telegramBot.sendTyping(chatId);
+      
+      try {
+        // Check if user has a wallet first
+        if (!crossmintWalletService.hasWallet(userId)) {
+          const userInfo: { username?: string; firstName?: string } = {};
+          if (msg.from?.username) userInfo.username = msg.from.username;
+          if (msg.from?.first_name) userInfo.firstName = msg.from.first_name;
+
+          const authLink = crossmintWalletService.generateAuthLink(userId, userInfo);
+          if (authLink) {
+            await telegramBot.sendMessage(
+              chatId,
+              'You need a wallet to set up delegation. Please create one first.',
+              {
+                reply_markup: {
+                  inline_keyboard: [[{ text: 'Create Wallet', url: authLink }]],
+                },
+              },
+            );
+          } else {
+            await telegramBot.sendMessage(chatId, 'Could not generate a wallet creation link. Please try again later.');
+          }
+          return;
+        }
+
+        const delegationUrl = this.getDelegationUrl(userId);
+        
+        await telegramBot.sendMessage(chatId, 
+          '🤖 *Enable Fast Shopping*\n\n' +
+          'Allow the bot to automatically sign transactions for instant purchases without manual approval\\.\n\n' +
+          '*Benefits:*\n' +
+          '• Instant purchases without waiting\n' +
+          '• Seamless shopping experience\n' +
+          '• You can revoke anytime\n' +
+          '• Your wallet remains secure\n\n' +
+          'Click the button below to set up delegation\\.',
+          {
+            parse_mode: 'MarkdownV2',
+            reply_markup: {
+              inline_keyboard: [[{ text: '⚡ Enable Fast Shopping', url: delegationUrl }]]
+            }
+          }
+        );
+        
+      } catch (error) {
+        console.error('Error during /delegate:', error);
+        await telegramBot.sendMessage(chatId, 'An error occurred. Please try again later.');
+      }
+    });
+  }
+
+  /**
+   * Handle callback-related commands
    */
   private static setupCallbackHandlers(): void {
     telegramBot.getBotInstance().on('callback_query', async (callbackQuery) => {
@@ -626,6 +702,28 @@ Want to chat? Just send me any message! 💬
                 inline_keyboard: [[{ text: 'Log in to Crossmint', url }]]
               }
             });
+          }
+          await telegramBot.getBotInstance().answerCallbackQuery(callbackQuery.id);
+          return;
+        }
+
+        // Handle delegation prompt callback
+        if (data === 'delegate_prompt') {
+          const userId = callbackQuery.from.id;
+          const delegationUrl = this.getDelegationUrl(userId);
+          const chatId = callbackQuery.message?.chat.id;
+
+          if (chatId) {
+            await telegramBot.sendMessage(chatId, 
+              '🤖 *Enable Fast Shopping*\n\n' +
+              'Set up delegation to allow instant purchases without manual approval\\.',
+              {
+                parse_mode: 'MarkdownV2',
+                reply_markup: {
+                  inline_keyboard: [[{ text: '⚡ Enable Fast Shopping', url: delegationUrl }]]
+                }
+              }
+            );
           }
           await telegramBot.getBotInstance().answerCallbackQuery(callbackQuery.id);
           return;
@@ -794,8 +892,4 @@ Want to chat? Just send me any message! 💬
       }
     });
   }
-
-  // Future commerce commands will be implemented in Phase 3:
-  // - /balance: Check user's Crossmint wallet balance
-  // - /buy: Initiate purchase flow with Crossmint checkout
 } 

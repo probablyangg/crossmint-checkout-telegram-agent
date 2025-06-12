@@ -36,15 +36,15 @@ const PaymentSchema = z.object({
   receiptEmail: z.string().optional(),
 });
 
-// Updated LineItems schema to be an object
-const LineItemsSchema = z.object({
+// Updated LineItems schema to be an array as per Crossmint API spec
+const LineItemsSchema = z.array(z.object({
   productLocator: z.string().describe("The product locator. Ex: 'amazon:<amazon_product_id>', 'amazon:<asin>'"),
-});
+}));
 
 const CreateOrderRequestSchema = z.object({
   recipient: RecipientSchema,
   payment: PaymentSchema,
-  lineItems: LineItemsSchema, // Single object, not array
+  lineItems: LineItemsSchema, // Array of line items as per Crossmint spec
 });
 
 const OrderResponseSchema = z.object({
@@ -117,7 +117,7 @@ const OrderResponseSchema = z.object({
 export type PhysicalAddress = z.infer<typeof PhysicalAddressSchema>;
 export type Recipient = z.infer<typeof RecipientSchema>;
 export type Payment = z.infer<typeof PaymentSchema>;
-export type LineItem = z.infer<typeof LineItemsSchema>;
+export type LineItems = z.infer<typeof LineItemsSchema>;
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
 export type OrderResponse = z.infer<typeof OrderResponseSchema>;
 
@@ -204,14 +204,12 @@ class CrossmintHeadlessCheckoutService {
 
   /**
    * Try multiple product locator formats for a given ASIN
+   * Using only the two official Crossmint formats from docs
    */
-  private getProductLocatorVariations(asin: string, amazonUrl: string): string[] {
+  private getProductLocatorVariations(asin: string, _amazonUrl: string): string[] {
     return [
-      `amazon:${asin}`,                                    // Standard format
-      `amazon:https://www.amazon.com/dp/${asin}`,         // Full URL format  
-      `amazon:${amazonUrl}`,                               // Original URL format
-      asin,                                                // Just ASIN
-      `https://www.amazon.com/dp/${asin}`                  // Clean URL format
+      `amazon:${asin}`,                                    // Standard ASIN format
+      `amazon:https://www.amazon.com/dp/${asin}`,         // Standard URL format  
     ];
   }
 
@@ -229,12 +227,14 @@ class CrossmintHeadlessCheckoutService {
       console.log(`\n🔄 === ATTEMPT ${i + 1}/${productLocatorVariations.length} ===`);
       console.log(`📍 Trying locator: ${locator}`);
       
-      // Update the order request with current locator
+      // Update the order request with current locator - FIXED: use array format
       const currentRequest = {
         ...orderRequest,
-        lineItems: {
-          productLocator: locator
-        }
+        lineItems: [
+          {
+            productLocator: locator
+          }
+        ]
       };
 
       try {
@@ -263,7 +263,7 @@ class CrossmintHeadlessCheckoutService {
         // Parse and return successful response
         return OrderResponseSchema.parse(response.data);
         
-      } catch (error) {
+    } catch (error) {
         console.log(`❌ Format ${i + 1} failed: ${locator}`);
         if (axios.isAxiosError(error)) {
           const status = error.response?.status;
@@ -323,7 +323,7 @@ class CrossmintHeadlessCheckoutService {
       }
 
       const blockchainMethod = this.getBestBlockchainForWallet(walletAddress);
-
+      
       const orderRequest: CreateOrderRequest = {
         recipient: {
           email: userEmail,
@@ -335,9 +335,11 @@ class CrossmintHeadlessCheckoutService {
           payerAddress: walletAddress, // REQUIRED: User's wallet address
           receiptEmail: userEmail,
         },
-        lineItems: {
-          productLocator, // Amazon product locator as object, not array
-        },
+        lineItems: [
+          {
+            productLocator, // Amazon product locator as array per Crossmint spec
+          }
+        ],
       };
 
       console.log(`🔗 Product locator: ${productLocator}`);

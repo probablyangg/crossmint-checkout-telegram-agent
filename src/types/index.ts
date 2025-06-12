@@ -11,6 +11,9 @@ export interface BotConfig {
     apiKey: string;
     model: string;
   };
+  bot: {
+    signerPrivateKey?: string | undefined;
+  };
   webApp: {
     url: string;
   };

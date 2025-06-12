@@ -19,6 +19,9 @@ const envSchema = z.object({
   // OpenAI Configuration  
   OPENAI_API_KEY: z.string().min(1, 'OpenAI API key is required'),
 
+  // Bot Signer Configuration
+  BOT_SIGNER_PRIVATE_KEY: z.string().optional(),
+
   // Web Application Configuration
   WEB_APP_URL: z.string().url().optional(),
 
@@ -63,6 +66,9 @@ export const config: BotConfig = {
   openai: {
     apiKey: env.OPENAI_API_KEY,
     model: 'gpt-4o', // Primary model from our tech stack
+  },
+  bot: {
+    signerPrivateKey: env.BOT_SIGNER_PRIVATE_KEY,
   },
   webApp: {
     url: env.WEB_APP_URL || 'https://your-app.vercel.app',

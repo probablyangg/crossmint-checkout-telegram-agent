@@ -42,7 +42,27 @@ npm run dev:all
 - **Crossmint API Keys** (staging environment)
 - **SearchAPI.io Key** (for Amazon product search)
 
-## 🛠️ Quick Setup
+## 🔑 Crossmint API Scopes
+
+When creating your Crossmint API keys, ensure you enable the following scopes:
+
+### Server-side API Key Scopes:
+- `wallets.read` - To fetch wallet information
+- `wallets:transactions.create` - To create transactions for purchasing products
+- `wallets:transactions.read` - To check transaction status
+- `wallets:transactions.sign` - To sign transactions when delegation is enabled
+- `orders.create` - To create orders for headless checkout
+- `orders.read` - To check order status
+- `orders.update` - To update orders if needed
+
+### Client-side API Key Scopes:
+- `wallets.read` - To view wallet information in web interface
+- `wallets.create` - To create client-side wallets via passkey signers
+- `orders.create` - To create checkout orders from client-side
+
+You can configure API keys and scopes in your Crossmint dashboard under Project Settings > API Keys.
+
+## ��️ Quick Setup
 
 ### 1. Clone and Install
 
@@ -95,53 +115,10 @@ This will:
 cp .env.example .env
 ```
 
-Edit `.env` with your keys:
-```bash
-# Telegram Bot Configuration
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
-
-# OpenAI Configuration  
-OPENAI_API_KEY=your_openai_api_key_here
-
-# SearchAPI.io Configuration
-SEARCHAPI_KEY=your_searchapi_key_here
-
-# Crossmint Configuration
-CROSSMINT_API_KEY=your_crossmint_server_api_key_here
-CROSSMINT_CLIENT_API_KEY=your_crossmint_client_api_key_here
-CROSSMINT_PROJECT_ID=your_crossmint_project_id_here
-CROSSMINT_ENVIRONMENT=staging
-
-# Application Configuration
-NODE_ENV=development
-PORT=3000
-WEB_APP_URL=https://your-ngrok-url-here  # Will update after ngrok setup
-```
-
 #### Web Interface Configuration
 ```bash
 cd web-interface
 cp .env.example .env.local
-```
-
-Edit `web-interface/.env.local`:
-```bash
-# Crossmint Configuration
-NEXT_PUBLIC_CROSSMINT_CLIENT_API_KEY=your_crossmint_client_api_key_here
-CROSSMINT_API_KEY=your_crossmint_server_api_key_here
-
-# Chain Configuration
-NEXT_PUBLIC_CHAIN_ID=base-sepolia
-NEXT_PUBLIC_USDC_MINT=0x036CbD53842c5426634e7929541eC2318f3dCF7e
-
-# Bot Integration (will update after ngrok setup)
-NEXT_PUBLIC_BOT_API_URL=https://your-bot-ngrok-url-here
-BOT_WEBHOOK_URL=https://your-bot-ngrok-url-here/api/webhook/wallet-created
-
-# Next.js Configuration
-NEXTAUTH_SECRET=your_random_secret_here
-NEXTAUTH_URL=https://your-web-ngrok-url-here  # Will update after ngrok setup
-NODE_ENV=development
 ```
 
 ## 🌐 ngrok Setup (Required for Local Development)

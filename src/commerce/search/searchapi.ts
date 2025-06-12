@@ -11,7 +11,7 @@ const env = envSchema.parse({
   SEARCHAPI_KEY: process.env.SEARCHAPI_KEY,
 });
 
-// SearchAPI.io Response Schemas
+// SearchAPI.io Responsƒe Schemas
 const SearchMetadataSchema = z.object({
   id: z.string(),
   status: z.string(),

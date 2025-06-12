@@ -62,7 +62,7 @@ When creating your Crossmint API keys, ensure you enable the following scopes:
 
 You can configure API keys and scopes in your Crossmint dashboard under Project Settings > API Keys.
 
-## ��️ Quick Setup
+## 💨 Quick Setup
 
 ### 1. Clone and Install
 

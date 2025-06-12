@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Fintech Starter App',
-  description: 'Create your own Fintech app in minutes using Crossmint',
+  title: 'Crossmint E-Commerce Agent',
+  description: 'Create your Telegram E-CommerceBot in minutes using Crossmint',
 }
 
 export default function RootLayout({

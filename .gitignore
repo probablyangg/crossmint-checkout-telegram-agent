@@ -73,9 +73,11 @@ build/
 # IDE directories
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
+.cursorignore
 
 # OS genrated files
 .DS_Store

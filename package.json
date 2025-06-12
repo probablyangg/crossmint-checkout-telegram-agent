@@ -5,6 +5,9 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
+    "setup": "npm run setup:env && npm run setup:web && echo '\n✅ Setup complete! Please update your .env files with your API keys.\n📖 See README.md for detailed instructions.'",
+    "setup:env": "cp env.example .env && echo '📝 Created .env file'",
+    "setup:web": "cd web-interface && cp env.example .env.local && echo '📝 Created web-interface/.env.local file'",
     "dev": "tsx watch src/index.ts",
     "dev:bot": "tsx watch --clear-screen=false src/index.ts",
     "dev:web": "cd web-interface && npm run dev",
@@ -12,7 +15,8 @@
     "build": "tsc && cd web-interface && npm run build",
     "start": "node dist/index.js",
     "test": "echo \"Running basic bot functionality test\" && npm run lint",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist && rm -rf web-interface/.next && rm -rf web-interface/dist"
   },
   "keywords": [
     "telegram",
@@ -20,7 +24,11 @@
     "ai",
     "openai",
     "chatbot",
-    "assistant"
+    "assistant",
+    "crossmint",
+    "ecommerce",
+    "crypto",
+    "wallet"
   ],
   "author": "Your Name",
   "license": "MIT",

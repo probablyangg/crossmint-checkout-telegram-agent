@@ -878,10 +878,11 @@ export async function handleCheckoutCancel(
 
 /**
  * Get user session (for debugging/admin)
- */
+ 
 export function getUserSession(userId: number): UserSession | undefined {
   return userSessions.get(userId);
 }
+*/
 
 /**
  * Start monitoring an order and notify user when completed

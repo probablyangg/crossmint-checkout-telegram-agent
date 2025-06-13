@@ -150,13 +150,14 @@ export function formatProductList(
 
 /**
  * Format a compact product summary for inline display
- */
+
 export function formatCompactProduct(product: ProductResult): string {
   const title = escapeMarkdown(truncateText(product.title, 50));
   const price = escapeMarkdown(formatPrice(product));
   
   return `${title} \\- ${price}`;
 }
+ */
 
 /**
  * Format search error message

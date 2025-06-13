@@ -90,4 +90,4 @@ export const isDevelopment = () => config.app.nodeEnv === 'development';
 /**
  * Helper function to check if we're in production mode
  */
-export const isProduction = () => config.app.nodeEnv === 'production'; 
+// export const isProduction = () => config.app.nodeEnv === 'production'; 

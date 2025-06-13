@@ -85,7 +85,7 @@ export function getConversationHistory(userId: number): Array<{ role: 'user' | '
 
 /**
  * Get recent messages for context
- */
+
 export function getRecentMessages(userId: number, count: number = 10): string[] {
   const memory = userMemories.get(userId);
   if (!memory) return [];
@@ -94,6 +94,7 @@ export function getRecentMessages(userId: number, count: number = 10): string[] 
     .slice(-count)
     .map(msg => `${msg.role}: ${msg.content}`);
 }
+ */
 
 /**
  * Get user's memory summary
@@ -134,7 +135,7 @@ export function clearUserMemory(userId: number): void {
 
 /**
  * Get memory stats
- */
+
 export function getMemoryStats(): { totalUsers: number; totalMessages: number; avgMessagesPerUser: number } {
   const totalUsers = userMemories.size;
   let totalMessages = 0;
@@ -149,6 +150,7 @@ export function getMemoryStats(): { totalUsers: number; totalMessages: number; a
     avgMessagesPerUser: totalUsers > 0 ? Math.round(totalMessages / totalUsers) : 0
   };
 }
+ */
 
 /**
  * Cleanup old memories

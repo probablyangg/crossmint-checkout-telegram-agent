@@ -313,6 +313,10 @@ npm run start            # Start production server
 - [Vercel AI SDK](https://sdk.vercel.ai)
 - [Next.js Documentation](https://nextjs.org/docs)
 
+## 👷 Support
+
+Join our [telegram chat](https://t.me/+FmKl2FsaRKIzZjlk) if you have any questions. 
+
 ## 🤝 Contributing
 
 1. Fork the repository

@@ -56,40 +56,40 @@ export interface WalletTransaction {
   createdAt: number;
 }
 
-export interface CrossmintWalletResponse {
-  id: string;
-  address: string;
-  chain: string;
-  type: 'evm-smart-wallet';
-  linkedUser: string;
-}
+// export interface CrossmintWalletResponse {
+//   id: string;
+//   address: string;
+//   chain: string;
+//   type: 'evm-smart-wallet';
+//   linkedUser: string;
+// }
 
-export interface CrossmintAuthResponse {
-  jwt: string;
-  user: {
-    id: string;
-    email?: string;
-  };
-}
+// export interface CrossmintAuthResponse {
+//   jwt: string;
+//   user: {
+//     id: string;
+//     email?: string;
+//   };
+// }
 
-export interface CrossmintBalanceResponse {
-  address: string;
-  chain: string;
-  tokens: Array<{
-    address: string;
-    symbol: string;
-    name: string;
-    decimals: number;
-    balance: string;
-    balanceUsd?: string;
-  }>;
-}
+// export interface CrossmintBalanceResponse {
+//   address: string;
+//   chain: string;
+//   tokens: Array<{
+//     address: string;
+//     symbol: string;
+//     name: string;
+//     decimals: number;
+//     balance: string;
+//     balanceUsd?: string;
+//   }>;
+// }
 
-export interface CrossmintTopUpOrder {
-  orderId: string;
-  status: 'pending' | 'completed' | 'failed';
-  amount: string;
-  currency: string;
-  paymentUrl?: string;
-  expiresAt: string;
-} 
+// export interface CrossmintTopUpOrder {
+//   orderId: string;
+//   status: 'pending' | 'completed' | 'failed';
+//   amount: string;
+//   currency: string;
+//   paymentUrl?: string;
+//   expiresAt: string;
+// } 

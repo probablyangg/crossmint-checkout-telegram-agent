@@ -26,26 +26,26 @@ export interface BotConfig {
   };
 }
 
-export interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
+// export interface ConversationMessage {
+//   role: 'user' | 'assistant';
+//   content: string;
+//   timestamp: Date;
+// }
 
-export interface UserConversation {
-  userId: number;
-  messages: ConversationMessage[];
-  lastActivity: Date;
-}
+// export interface UserConversation {
+//   userId: number;
+//   messages: ConversationMessage[];
+//   lastActivity: Date;
+// }
 
-export interface BotResponse {
-  text: string;
-  success: boolean;
-  error?: string;
-}
+// export interface BotResponse {
+//   text: string;
+//   success: boolean;
+//   error?: string;
+// }
 
-export interface RateLimitInfo {
-  userId: number;
-  messageCount: number;
-  windowStart: Date;
-} 
+// export interface RateLimitInfo {
+//   userId: number;
+//   messageCount: number;
+//   windowStart: Date;
+// } 

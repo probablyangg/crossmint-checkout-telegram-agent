@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "setup": "npm run setup:env && npm run setup:web && echo '\n✅ Setup complete! Please update your .env files with your API keys.\n📖 See README.md for detailed instructions.'",
-    "setup:env": "cp env.example .env && echo '📝 Created .env file'",
-    "setup:web": "cd web-interface && cp env.example .env.local && echo '📝 Created web-interface/.env.local file'",
+    "setup:env": "cp .env.example .env && echo '📝 Created .env file'",
+    "setup:web": "cd web-interface && cp .env.example .env.local && echo '📝 Created web-interface/.env.local file'",
     "dev": "tsx watch src/index.ts",
     "dev:bot": "tsx watch --clear-screen=false src/index.ts",
     "dev:web": "cd web-interface && npm run dev",

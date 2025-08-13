@@ -1,9 +1,9 @@
 version: "2"
-authtoken: 2y7DFjHWbXPDKT9wQzaqvzxCndl_3ifHFqrxTDKLFFZfk13mc
+authtoken: 
 tunnels:
   web-interface:
     proto: http
     addr: 3001
   bot-server:
     proto: http
-    addr: 3000 
+    addr: 3000

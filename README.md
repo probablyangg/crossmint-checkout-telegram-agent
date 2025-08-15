@@ -13,6 +13,7 @@ AI-powered Telegram shopping assistant with Crossmint wallet integration for sea
 
 ## ⚡ Quick Start
 
+### 🚀 Super Quick Start (Recommended)
 ```bash
 # 1. Clone and install
 git clone <your-repo-url>
@@ -24,10 +25,26 @@ npm run setup
 
 # 3. Get your API keys (see detailed instructions below)
 # 4. Update .env and web-interface/.env.local with your keys
+
+# 5. One command to start everything!
+npm run dev:full
+```
+
+This automatically:
+- ✅ Starts ngrok tunnels
+- ✅ Updates all environment files with ngrok URLs
+- ✅ Starts both development servers
+
+### 📝 Manual Quick Start
+```bash
+# 1-4. Same as above
+
 # 5. Start ngrok tunnels
 ngrok start --all --config ngrok.yml
 
-# 6. Update environment files with ngrok URLs
+# 6. Auto-update environment files with ngrok URLs
+npm run update-urls
+
 # 7. Start the application
 npm run dev:all
 ```
@@ -228,6 +245,8 @@ You should see Amazon products with "Buy with Crossmint" buttons.
 ### Bot Scripts
 ```bash
 npm run setup            # Quick setup - copy environment files
+npm run update-urls      # Auto-update ngrok URLs in environment files
+npm run dev:full         # 🚀 Start everything (ngrok + URL updates + servers)
 npm run dev:bot          # Start bot in development mode
 npm run dev:web          # Start web interface in development mode
 npm run dev:all          # Start both bot and web interface
